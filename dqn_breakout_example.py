@@ -17,16 +17,21 @@ from atari_wrappers import wrap_deepmind, make_atari
 
 class ReplayMemory(object):
     ## TODO ##
-    def __init__(self):
-        
+    __slots__ = ['buffer']
+    def __init__(self, capacity):
+        self.buffer = deque(maxlen=capacity)
 
 
-    def push(self, state, action, reward, done):
+    def push(self, *transition):
         """Saves a transition"""
+        self.buffer.append(tuple(map(tuple, transition)))
         
 
-    def sample(self):
+    def sample(self, batch_size, device):
         """Sample a batch of transitions"""
+        transitions = random(tuple(map(tuple, batch_size)))
+        return (torch.tensor(x, dtype=torch.float, device=device)
+                for x in zip(*transitions))
         
 
     def __len__(self):
@@ -83,7 +88,7 @@ class DQN:
 
         ## TODO ##
         """Initialize replay buffer"""
-        #self._memory = ReplayMemory(...)
+        self._memory = ReplayMemory(args.capacity)
 
         ## config ##
         self.device = args.device
@@ -95,12 +100,20 @@ class DQN:
     def select_action(self, state, epsilon, action_space):
         '''epsilon-greedy based on behavior network'''
         ## TODO ##
+        if random.random() < epsilon:
+            return action_space.sample()
+        
+        with torch.no_grad():
+            state = torch.tensor(state, device=self.device).view(1, -1)
+            outputs = self._behavior_net(state)
+            _, best_action = torch.max(outputs, 1)
+            return best_action.item()
         
 
     def append(self, state, action, reward, done):
         ## TODO ##
         """Push a transition into replay buffer"""
-        #self._memory.push(...)
+        self._memory.push(state, [action], [reward], int(done))
 
     def update(self, total_steps):
         if total_steps % self.freq == 0:
@@ -141,7 +154,7 @@ class DQN:
 def train(args, agent, writer):
     print('Start Training')
     env_raw = make_atari('BreakoutNoFrameskip-v4')
-    env = wrap_deepmind(env_raw)
+    env = wrap_deepmind(env_raw, episode_life=True, clip_rewards=True, frame_stack=True)
     action_space = env.action_space
     total_steps, epsilon = 0, 1.
     ewma_reward = 0
