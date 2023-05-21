@@ -6,6 +6,7 @@ from collections import deque
 import itertools
 import random
 import time
+from tqdm import tqdm
 
 import gym
 import numpy as np
@@ -144,7 +145,7 @@ def train(args, env, agent, writer):
     action_space = env.action_space
     total_steps, epsilon = 0, 1.
     ewma_reward = 0
-    for episode in range(args.episode):
+    for episode in tqdm(range(args.episode)):
         total_reward = 0
         state = env.reset()
         for t in itertools.count(start=1):

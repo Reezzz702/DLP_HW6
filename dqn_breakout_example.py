@@ -96,6 +96,13 @@ class DQN:
         self.gamma = args.gamma
         self.freq = args.freq
         self.target_freq = args.target_freq
+    
+    def state_initialize(self):
+        self.state_buffer = []
+        state = self.env.reset()
+        for _ in range(4+1):
+            self.state_buffer.append(state)
+        return self.state_buffer[1:5]
 
     def select_action(self, state, epsilon, action_space):
         '''epsilon-greedy based on behavior network'''
@@ -110,10 +117,10 @@ class DQN:
             return best_action.item()
         
 
-    def append(self, state, action, reward, done):
+    def append(self, state, action, reward, next_state, done):
         ## TODO ##
         """Push a transition into replay buffer"""
-        self._memory.push(state, [action], [reward], int(done))
+        self._memory.push(state, [action], [reward], next_state, int(done))
 
     def update(self, total_steps):
         if total_steps % self.freq == 0:
@@ -125,11 +132,24 @@ class DQN:
         # sample a minibatch of transitions
         state, action, reward, next_state, done = self._memory.sample()
         ## TODO ##
+        q_value =self._behavior_net(state).gather(1, action.long())
+        with torch.no_grad:
+            q_next = torch.max(self._target_net(next_state), 1)[0].view(-1, 1)
+            q_target = reward +q_next * gamma * (1 - done)
+        criterion = nn.MSELoss()
+        loss = criterion(q_value, q_target)
+
+        self._optimizer.zero_grade()
+        loss.backward()
+        nn.utils.clip_grad_norm_(self._behavior_net.parameters(), 5)
+        self._optimizer.step()
+
         
 
     def _update_target_network(self):
         '''update target network by copying from behavior network'''
         ## TODO ##
+        self._target_net.load_state_dict(self._behavior_net.state_dict())
         
 
     def save(self, model_path, checkpoint=False):
@@ -163,7 +183,7 @@ def train(args, agent, writer):
         total_reward = 0
         state = env.reset()
         state, reward, done, _ = env.step(1) # fire first !!!
-
+        print(state.size)
         for t in itertools.count(start=1):
             if total_steps < args.warmup:
                 action = action_space.sample()
