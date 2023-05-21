@@ -21,15 +21,13 @@ class ReplayMemory(object):
     def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
 
-
     def push(self, *transition):
         """Saves a transition"""
-        self.buffer.append(tuple(map(tuple, transition)))
-        
+        self.buffer.append(tuple(map(tuple, transition)))        
 
     def sample(self, batch_size, device):
         """Sample a batch of transitions"""
-        transitions = random(tuple(map(tuple, batch_size)))
+        transitions = random.sample(self.buffer, batch_size)
         return (torch.tensor(x, dtype=torch.float, device=device)
                 for x in zip(*transitions))
         
@@ -97,12 +95,12 @@ class DQN:
         self.freq = args.freq
         self.target_freq = args.target_freq
     
-    def state_initialize(self):
-        self.state_buffer = []
-        state = self.env.reset()
-        for _ in range(4+1):
-            self.state_buffer.append(state)
-        return self.state_buffer[1:5]
+    # def state_initialize(self):
+    #     self.state_buffer = []
+    #     state = self.env.reset()
+    #     for _ in range(4+1):
+    #         self.state_buffer.append(state)
+    #     return self.state_buffer[1:5]
 
     def select_action(self, state, epsilon, action_space):
         '''epsilon-greedy based on behavior network'''
@@ -111,7 +109,7 @@ class DQN:
             return action_space.sample()
         
         with torch.no_grad():
-            state = torch.tensor(state, device=self.device).view(1, -1)
+            state = torch.tensor(state, device=self.device).unsqueeze(0).permute(0,3,1,2)
             outputs = self._behavior_net(state)
             _, best_action = torch.max(outputs, 1)
             return best_action.item()
@@ -120,7 +118,7 @@ class DQN:
     def append(self, state, action, reward, next_state, done):
         ## TODO ##
         """Push a transition into replay buffer"""
-        self._memory.push(state, [action], [reward], next_state, int(done))
+        self._memory.push(state, [action], [reward], next_state, [int(done)])
 
     def update(self, total_steps):
         if total_steps % self.freq == 0:
@@ -130,21 +128,23 @@ class DQN:
 
     def _update_behavior_network(self, gamma):
         # sample a minibatch of transitions
-        state, action, reward, next_state, done = self._memory.sample()
+        state, action, reward, next_state, done = self._memory.sample(self.batch_size, self.device)
         ## TODO ##
+        state = state.permute(0,3,1,2)
+        next_state = next_state.permute(0, 3, 1, 2)
+        # next_state = torch.tensor(next_state,device=self.device).permute(0, 3, 1, 2)
+
         q_value =self._behavior_net(state).gather(1, action.long())
-        with torch.no_grad:
+        with torch.no_grad():
             q_next = torch.max(self._target_net(next_state), 1)[0].view(-1, 1)
             q_target = reward +q_next * gamma * (1 - done)
         criterion = nn.MSELoss()
         loss = criterion(q_value, q_target)
 
-        self._optimizer.zero_grade()
+        self._optimizer.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(self._behavior_net.parameters(), 5)
         self._optimizer.step()
-
-        
 
     def _update_target_network(self):
         '''update target network by copying from behavior network'''
@@ -183,7 +183,7 @@ def train(args, agent, writer):
         total_reward = 0
         state = env.reset()
         state, reward, done, _ = env.step(1) # fire first !!!
-        print(state.size)
+        # print("start")
         for t in itertools.count(start=1):
             if total_steps < args.warmup:
                 action = action_space.sample()
@@ -195,21 +195,22 @@ def train(args, agent, writer):
                 epsilon = max(epsilon, args.eps_min)
 
             # execute action
+            prev_state = state
             state, reward, done, _ = env.step(action)
 
             ## TODO ##
             # store transition
-            #agent.append(...)
+            agent.append(prev_state, action, reward, state, done)
 
             if total_steps >= args.warmup:
                 agent.update(total_steps)
 
             total_reward += reward
 
-            if total_steps % args.eval_freq == 0:
-                """You can write another evaluate function, or just call the test function."""
-                test(args, agent, writer)
-                agent.save(args.model + "dqn_" + str(total_steps) + ".pt")
+            # if total_steps % args.eval_freq == 0:
+            #     """You can write another evaluate function, or just call the test function."""
+            #     test(args, agent, writer)
+            #     agent.save(args.model + "dqn_" + str(total_steps) + ".pt")
 
             total_steps += 1
             if done:
@@ -225,7 +226,7 @@ def train(args, agent, writer):
 def test(args, agent, writer):
     print('Start Testing')
     env_raw = make_atari('BreakoutNoFrameskip-v4')
-    env = wrap_deepmind(env_raw)
+    env = wrap_deepmind(env_raw, frame_stack=True)
     action_space = env.action_space
     e_rewards = []
     
@@ -236,7 +237,8 @@ def test(args, agent, writer):
 
         while not done:
             time.sleep(0.01)
-            env.render()
+            if args.render:
+                env.render()
             action = agent.select_action(state, args.test_epsilon, action_space)
             state, reward, done, _ = env.step(action)
             e_reward += reward
@@ -252,8 +254,8 @@ def main():
     ## arguments ##
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-d', '--device', default='cuda')
-    parser.add_argument('-m', '--model', default='ckpt/')
-    parser.add_argument('--logdir', default='log/dqn')
+    parser.add_argument('-m', '--model', default='dqn_breakout.pth')
+    parser.add_argument('--logdir', default='log/breakout')
     # train
     parser.add_argument('--warmup', default=20000, type=int)
     parser.add_argument('--episode', default=20000, type=int)
@@ -267,7 +269,7 @@ def main():
     parser.add_argument('--target_freq', default=10000, type=int)
     parser.add_argument('--eval_freq', default=200000, type=int)
     # test
-    parser.add_argument('--test_only', action='store_true')
+    parser.add_argument('--test_only', action='store_true', default=False)
     parser.add_argument('-tmp', '--test_model_path', default='ckpt/dqn_1000000.pt')
     parser.add_argument('--render', action='store_true')
     parser.add_argument('--test_episode', default=10, type=int)
@@ -278,11 +280,12 @@ def main():
     ## main ##
     agent = DQN(args)
     writer = SummaryWriter(args.logdir)
-    if args.test_only:
-        agent.load(args.test_model_path)
-        test(args, agent, writer)
-    else:
+    if not args.test_only:
         train(args, agent, writer)
+        agent.save(args.model)
+    else:
+        agent.load(args.args.model)
+        test(args, agent, writer)
         
 
 
