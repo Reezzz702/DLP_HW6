@@ -6,6 +6,7 @@ from collections import deque
 import itertools
 import random
 import time
+from tqdm import tqdm
 
 import gym
 import numpy as np
@@ -215,7 +216,8 @@ def train(args, env, agent, writer):
     print('Start Training')
     total_steps = 0
     ewma_reward = 0
-    for episode in range(args.episode):
+    best_reward = -np.inf
+    for episode in tqdm(range(args.episode)):
         total_reward = 0
         state = env.reset()
         for t in itertools.count(start=1):
@@ -237,14 +239,21 @@ def train(args, env, agent, writer):
             if done:
                 ewma_reward = 0.05 * total_reward + (1 - 0.05) * ewma_reward
                 writer.add_scalar('Train/Episode Reward', total_reward,
-                                  total_steps)
+                                  episode)
                 writer.add_scalar('Train/Ewma Reward', ewma_reward,
-                                  total_steps)
-                print(
-                    'Step: {}\tEpisode: {}\tLength: {:3d}\tTotal reward: {:.2f}\tEwma reward: {:.2f}'
-                    .format(total_steps, episode, t, total_reward,
-                            ewma_reward))
+                                  episode)
+                # print(
+                #     'Step: {}\tEpisode: {}\tLength: {:3d}\tTotal reward: {:.2f}\tEwma reward: {:.2f}'
+                #     .format(total_steps, episode, t, total_reward,
+                #             ewma_reward))
                 break
+
+        if episode % args.eval_freq == 0 and episode != 0:
+            r = test(args, env, agent, writer)
+            if r > best_reward:
+                agent.save(args.model)
+                best_reward = r
+
     env.close()
 
 
@@ -277,6 +286,7 @@ def test(args, env, agent, writer):
 
     print('Average Reward', np.mean(rewards))
     env.close()
+    return np.mean(rewards)
 
 
 def main():
@@ -294,6 +304,7 @@ def main():
     parser.add_argument('--lrc', default=1e-3, type=float)
     parser.add_argument('--gamma', default=.99, type=float)
     parser.add_argument('--tau', default=.005, type=float)
+    parser.add_argument('--eval_freq', default=100, type=int)
     # test
     parser.add_argument('--test_only', action='store_true')
     parser.add_argument('--render', action='store_true')
@@ -306,7 +317,7 @@ def main():
     writer = SummaryWriter(args.logdir)
     if not args.test_only:
         train(args, env, agent, writer)
-        agent.save(args.model)
+        # agent.save(args.model)
     agent.load(args.model)
     test(args, env, agent, writer)
 

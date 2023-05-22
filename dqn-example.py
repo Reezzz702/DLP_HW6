@@ -6,6 +6,7 @@ from collections import deque
 import itertools
 import random
 import time
+from tqdm import tqdm
 
 import gym
 import numpy as np
@@ -144,7 +145,8 @@ def train(args, env, agent, writer):
     action_space = env.action_space
     total_steps, epsilon = 0, 1.
     ewma_reward = 0
-    for episode in range(args.episode):
+    best_reward = -np.inf
+    for episode in tqdm(range(args.episode)):
         total_reward = 0
         state = env.reset()
         for t in itertools.count(start=1):
@@ -170,11 +172,17 @@ def train(args, env, agent, writer):
                                   episode)
                 writer.add_scalar('Train/Ewma Reward', ewma_reward,
                                   episode)
-                print(
-                    'Step: {}\tEpisode: {}\tLength: {:3d}\tTotal reward: {:.2f}\tEwma reward: {:.2f}\tEpsilon: {:.3f}'
-                    .format(total_steps, episode, t, total_reward, ewma_reward,
-                            epsilon))
+                # print(
+                #     'Step: {}\tEpisode: {}\tLength: {:3d}\tTotal reward: {:.2f}\tEwma reward: {:.2f}\tEpsilon: {:.3f}'
+                #     .format(total_steps, episode, t, total_reward, ewma_reward,
+                #             epsilon))
                 break
+        if episode % args.eval_freq == 0 and episode != 0:
+            r = test(args, agent, writer)
+            if r > best_reward:
+                agent.save(args.model)
+                best_reward = r
+
     env.close()
 
 
@@ -205,6 +213,7 @@ def test(args, env, agent, writer):
                 break    
     print('Average Reward', np.mean(rewards))
     env.close()
+    return np.mean(rewards)
 
 
 def main():
@@ -224,6 +233,7 @@ def main():
     parser.add_argument('--gamma', default=.99, type=float)
     parser.add_argument('--freq', default=4, type=int)
     parser.add_argument('--target_freq', default=100, type=int)
+    parser.add_argument('--eval_freq', default=50, type=int)
     # test
     parser.add_argument('--test_only', action='store_true')
     parser.add_argument('--render', action='store_true')

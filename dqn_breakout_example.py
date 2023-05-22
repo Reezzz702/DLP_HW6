@@ -214,7 +214,7 @@ def train(args, agent, writer):
                 ewma_reward = 0.05 * total_reward + (1 - 0.05) * ewma_reward
                 writer.add_scalar('Train/Episode Reward', total_reward, episode)
                 writer.add_scalar('Train/Ewma Reward', ewma_reward, episode)
-                writer.add_scalar('Train/epsilon', epsilon)
+                writer.add_scalar('Train/epsilon', epsilon, episode)
                 # print('Step: {}\tEpisode: {}\tLength: {:3d}\tTotal reward: {:.2f}\tEwma reward: {:.2f}\tEpsilon: {:.3f}'
                 #         .format(total_steps, episode, t, total_reward, ewma_reward, epsilon))
                 break
@@ -274,7 +274,7 @@ def main():
     parser.add_argument('--gamma', default=.99, type=float)
     parser.add_argument('--freq', default=4, type=int)
     parser.add_argument('--target_freq', default=10000, type=int)
-    parser.add_argument('--eval_freq', default=200000, type=int)
+    parser.add_argument('--eval_freq', default=500, type=int)
     # test
     parser.add_argument('--test_only', action='store_true', default=False)
     parser.add_argument('-tmp', '--test_model_path', default='ckpt/dqn_1000000.pt')
