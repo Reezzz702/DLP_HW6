@@ -6,6 +6,7 @@ from collections import deque
 import itertools
 import random
 import time
+from tqdm import tqdm
 
 import gym
 import numpy as np
@@ -179,7 +180,7 @@ def train(args, agent, writer):
     total_steps, epsilon = 0, 1.
     ewma_reward = 0
 
-    for episode in range(args.episode):
+    for episode in tqdm(range(args.episode)):
         total_reward = 0
         state = env.reset()
         state, reward, done, _ = env.step(1) # fire first !!!
@@ -207,26 +208,29 @@ def train(args, agent, writer):
 
             total_reward += reward
 
-            # if total_steps % args.eval_freq == 0:
-            #     """You can write another evaluate function, or just call the test function."""
-            #     test(args, agent, writer)
-            #     agent.save(args.model + "dqn_" + str(total_steps) + ".pt")
 
             total_steps += 1
             if done:
                 ewma_reward = 0.05 * total_reward + (1 - 0.05) * ewma_reward
                 writer.add_scalar('Train/Episode Reward', total_reward, episode)
                 writer.add_scalar('Train/Ewma Reward', ewma_reward, episode)
-                print('Step: {}\tEpisode: {}\tLength: {:3d}\tTotal reward: {:.2f}\tEwma reward: {:.2f}\tEpsilon: {:.3f}'
-                        .format(total_steps, episode, t, total_reward, ewma_reward, epsilon))
+                writer.add_scalar('Train/epsilon', epsilon)
+                # print('Step: {}\tEpisode: {}\tLength: {:3d}\tTotal reward: {:.2f}\tEwma reward: {:.2f}\tEpsilon: {:.3f}'
+                #         .format(total_steps, episode, t, total_reward, ewma_reward, epsilon))
                 break
+
+        if episode % args.eval_freq == 0 and episode != 0:
+            """You can write another evaluate function, or just call the test function."""
+            test(args, agent, writer)
+            agent.save(args.logdir + "/dqn_" + str(episode) + ".pth")
+
     env.close()
 
 
 def test(args, agent, writer):
     print('Start Testing')
     env_raw = make_atari('BreakoutNoFrameskip-v4')
-    env = wrap_deepmind(env_raw, frame_stack=True)
+    env = wrap_deepmind(env_raw, frame_stack=True, episode_life=False, clip_rewards=False)
     action_space = env.action_space
     e_rewards = []
     
@@ -243,11 +247,14 @@ def test(args, agent, writer):
             state, reward, done, _ = env.step(action)
             e_reward += reward
 
-        print('episode {}: {:.2f}'.format(i+1, e_reward))
         e_rewards.append(e_reward)
 
     env.close()
-    print('Average Reward: {:.2f}'.format(float(sum(e_rewards)) / float(args.test_episode)))
+    if not args.test_only:
+        writer.add_scalar("Val/Average Reward", float(sum(e_rewards)) / float(args.test_episode))
+        # print('episode {}: {:.2f}'.format(i+1, e_reward))
+    else:
+        print('Average Reward: {:.2f}'.format(float(sum(e_rewards)) / float(args.test_episode)))
 
 
 def main():
@@ -262,7 +269,7 @@ def main():
     parser.add_argument('--capacity', default=100000, type=int)
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--lr', default=0.0000625, type=float)
-    parser.add_argument('--eps_decay', default=1000000, type=float)
+    parser.add_argument('--eps_decay', default=100000, type=float)
     parser.add_argument('--eps_min', default=0.1, type=float)
     parser.add_argument('--gamma', default=.99, type=float)
     parser.add_argument('--freq', default=4, type=int)
