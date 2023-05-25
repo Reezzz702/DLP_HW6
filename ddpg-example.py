@@ -248,17 +248,20 @@ def train(args, env, agent, writer):
                 #             ewma_reward))
                 break
 
-        if episode % args.eval_freq == 0 and episode != 0:
-            r = test(args, env, agent, writer)
+        if (episode+1) % args.eval_freq == 0:
+            r = test(args, agent, writer)
+            writer.add_scalar("Val score", r, episode)
             if r > best_reward:
-                agent.save(args.model)
+                agent.save(f"{args.logdir}/best.pth")
                 best_reward = r
+            agent.save(f"{args.logdir}/ep_{episode+1}.pth")
 
     env.close()
 
 
-def test(args, env, agent, writer):
+def test(args, agent, writer):
     print('Start Testing')
+    env = gym.make('LunarLanderContinuous-v2')
     seeds = (args.seed + i for i in range(10))
     rewards = []
     for n_episode, seed in enumerate(seeds):
@@ -277,7 +280,7 @@ def test(args, env, agent, writer):
             state = next_state
             total_reward += reward
             if done:
-                writer.add_scalar('Test/Episode Reward', total_reward, n_episode)
+                # writer.add_scalar('Test/Episode Reward', total_reward, n_episode)
                 print(
                     f'Episode: {n_episode}\tLength: {t:3d}\tTotal reward: {total_reward:.2f}'
                 )
@@ -318,7 +321,7 @@ def main():
     if not args.test_only:
         train(args, env, agent, writer)
         # agent.save(args.model)
-    agent.load(args.model)
+    agent.load(f"args.logdir/best.pth")
     test(args, env, agent, writer)
 
 

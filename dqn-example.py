@@ -177,16 +177,20 @@ def train(args, env, agent, writer):
                 #     .format(total_steps, episode, t, total_reward, ewma_reward,
                 #             epsilon))
                 break
-        if episode % args.eval_freq == 0 and episode != 0:
+        if (episode+1) % args.eval_freq == 0:
             r = test(args, agent, writer)
+            writer.add_scalar("Val score", r, episode)
             if r > best_reward:
-                agent.save(args.model)
+                agent.save(f"{args.logdir}/best.pth")
                 best_reward = r
+            agent.save(f"{args.logdir}/ep_{episode+1}.pth")
+            
 
     env.close()
 
 
-def test(args, env, agent, writer):
+def test(args, agent, writer):
+    env = gym.make('LunarLander-v2')
     print('Start Testing')
     action_space = env.action_space
     epsilon = args.test_epsilon
@@ -207,9 +211,9 @@ def test(args, env, agent, writer):
             total_reward += reward
 
             if done:
-                writer.add_scalar('Test/Episode Reward', total_reward, n_episode)
+                # writer.add_scalar('Test/Episode Reward', total_reward, n_episode)
                 rewards.append(total_reward)
-                print(f'Episode: {n_episode}\t\Length: {t:3d}\tTotal Reward: {total_reward:.2f}')
+                print(f'Episode: {n_episode}\tLength: {t:3d}\tTotal Reward: {total_reward:.2f}')
                 break    
     print('Average Reward', np.mean(rewards))
     env.close()
@@ -232,13 +236,13 @@ def main():
     parser.add_argument('--eps_min', default=.01, type=float)
     parser.add_argument('--gamma', default=.99, type=float)
     parser.add_argument('--freq', default=4, type=int)
-    parser.add_argument('--target_freq', default=100, type=int)
+    parser.add_argument('--target_freq', default=1000, type=int)
     parser.add_argument('--eval_freq', default=50, type=int)
     # test
     parser.add_argument('--test_only', action='store_true')
     parser.add_argument('--render', action='store_true')
     parser.add_argument('--seed', default=20200519, type=int)
-    parser.add_argument('--test_epsilon', default=.001, type=float)
+    parser.add_argument('--test_epsilon', default=.000, type=float)
     args = parser.parse_args()
 
     ## main ##
@@ -247,9 +251,9 @@ def main():
     writer = SummaryWriter(args.logdir)
     if not args.test_only:
         train(args, env, agent, writer)
-        agent.save(args.model)
-    agent.load(args.model)
-    test(args, env, agent, writer)
+        # agent.save(args.model)
+    agent.load(f"{args.logdir}/best.pth")
+    test(args, agent, writer)
 
 
 if __name__ == '__main__':

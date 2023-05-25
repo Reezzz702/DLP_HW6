@@ -178,15 +178,18 @@ def train(args, agent, writer):
     env = wrap_deepmind(env_raw, episode_life=True, clip_rewards=True, frame_stack=True)
     action_space = env.action_space
     total_steps, epsilon = 0, 1.
+    if args.resume != 0:
+        epsilon = args.eps_min
     ewma_reward = 0
-
-    for episode in tqdm(range(args.episode)):
+    best_reward = -np.inf
+    start_ep = args.resume
+    for episode in tqdm(range(start_ep, args.episode)):
         total_reward = 0
         state = env.reset()
         state, reward, done, _ = env.step(1) # fire first !!!
         # print("start")
         for t in itertools.count(start=1):
-            if total_steps < args.warmup:
+            if total_steps < args.warmup and args.resume == 0:
                 action = action_space.sample()
             else:
                 # select action
@@ -221,8 +224,12 @@ def train(args, agent, writer):
 
         if episode % args.eval_freq == 0 and episode != 0:
             """You can write another evaluate function, or just call the test function."""
-            test(args, agent, writer)
+            val_reward = test(args, agent, writer)
+            if val_reward > best_reward:
+                agent.save(args.logdir + "/dqn_best" + ".pth")
+                best_reward = val_reward
             agent.save(args.logdir + "/dqn_" + str(episode) + ".pth")
+            writer.add_scalar('Val score', val_reward, episode)
 
     env.close()
 
@@ -234,7 +241,7 @@ def test(args, agent, writer):
     action_space = env.action_space
     e_rewards = []
     
-    for i in range(args.test_episode):
+    for i in tqdm(range(args.test_episode)):
         state = env.reset()
         e_reward = 0
         done = False
@@ -250,12 +257,12 @@ def test(args, agent, writer):
         e_rewards.append(e_reward)
 
     env.close()
-    if not args.test_only:
-        writer.add_scalar("Val/Average Reward", float(sum(e_rewards)) / float(args.test_episode))
-        # print('episode {}: {:.2f}'.format(i+1, e_reward))
-    else:
-        print('Average Reward: {:.2f}'.format(float(sum(e_rewards)) / float(args.test_episode)))
+    # if not args.test_only:
+    #     writer.add_scalar("Val/Average Reward", float(sum(e_rewards)) / float(args.test_episode))
+    #     # print('episode {}: {:.2f}'.format(i+1, e_reward))
+    print('Average Reward: {:.2f}'.format(float(sum(e_rewards)) / float(args.test_episode)))
 
+    return float(sum(e_rewards)) / float(args.test_episode)
 
 def main():
     ## arguments ##
@@ -275,6 +282,7 @@ def main():
     parser.add_argument('--freq', default=4, type=int)
     parser.add_argument('--target_freq', default=10000, type=int)
     parser.add_argument('--eval_freq', default=500, type=int)
+    parser.add_argument('--resume', default=0, type=int)
     # test
     parser.add_argument('--test_only', action='store_true', default=False)
     parser.add_argument('-tmp', '--test_model_path', default='ckpt/dqn_1000000.pt')
@@ -288,6 +296,8 @@ def main():
     agent = DQN(args)
     writer = SummaryWriter(args.logdir)
     if not args.test_only:
+        if args.resume != 0:
+            agent.load(args.logdir + "/dqn_" + str(args.resume) + ".pth")
         train(args, agent, writer)
         agent.save(args.model)
     else:
