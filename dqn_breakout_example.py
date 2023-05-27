@@ -241,7 +241,7 @@ def test(args, agent, writer):
     action_space = env.action_space
     e_rewards = []
     
-    for i in tqdm(range(args.test_episode)):
+    for i in range(args.test_episode):
         state = env.reset()
         e_reward = 0
         done = False
@@ -255,11 +255,11 @@ def test(args, agent, writer):
             e_reward += reward
 
         e_rewards.append(e_reward)
+        if args.test_only:
+    #     writer.add_scalar("Val/Average Reward", float(sum(e_rewards)) / float(args.test_episode))
+            print('episode {}: {:.2f}'.format(i+1, e_reward))
 
     env.close()
-    # if not args.test_only:
-    #     writer.add_scalar("Val/Average Reward", float(sum(e_rewards)) / float(args.test_episode))
-    #     # print('episode {}: {:.2f}'.format(i+1, e_reward))
     print('Average Reward: {:.2f}'.format(float(sum(e_rewards)) / float(args.test_episode)))
 
     return float(sum(e_rewards)) / float(args.test_episode)
@@ -301,7 +301,7 @@ def main():
         train(args, agent, writer)
         agent.save(args.model)
     else:
-        agent.load(args.args.model)
+        agent.load(f"{args.logdir}/dqn_best.pth")
         test(args, agent, writer)
         
 

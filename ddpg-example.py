@@ -321,8 +321,8 @@ def main():
     if not args.test_only:
         train(args, env, agent, writer)
         # agent.save(args.model)
-    agent.load(f"args.logdir/best.pth")
-    test(args, env, agent, writer)
+    agent.load(f"{args.logdir}/best.pth")
+    test(args, agent, writer)
 
 
 if __name__ == '__main__':

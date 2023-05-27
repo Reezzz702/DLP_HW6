@@ -242,7 +242,7 @@ def main():
     parser.add_argument('--test_only', action='store_true')
     parser.add_argument('--render', action='store_true')
     parser.add_argument('--seed', default=20200519, type=int)
-    parser.add_argument('--test_epsilon', default=.000, type=float)
+    parser.add_argument('--test_epsilon', default=.001, type=float)
     args = parser.parse_args()
 
     ## main ##
